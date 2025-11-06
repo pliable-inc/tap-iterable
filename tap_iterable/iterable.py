@@ -24,6 +24,7 @@ class Iterable(object):
     self.api_window_in_days = int(api_window_in_days)
     self.MAX_BYTES = 10240
     self.CHUNK_SIZE = 512
+    self.headers = {"Api-Key": self.api_key}
 
 
   def _now(self):
@@ -60,13 +61,13 @@ class Iterable(object):
     uri = "{uri}{path}".format(uri=self.uri, path=path)
     
     # Add query params, including `api_key`.
-    params = { "api_key": self.api_key }
+    params = { }
     for key, value in kwargs.items():
       params[key] = value
     uri += "?{params}".format(params=urlencode(params))
 
     logger.info("GET request to {uri}".format(uri=uri))
-    response = requests.get(uri, stream=stream)
+    response = requests.get(uri, stream=stream, headers=self.headers)
     response.raise_for_status()
     return response
 
