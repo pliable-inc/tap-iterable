@@ -26,7 +26,7 @@ setup(
     """,
     packages=["tap_iterable"],
     package_data = {
-        "schemas": ["tap_iterable/schemas/*.json"]
+        "tap_iterable": ["tap_iterable/schemas/*.json"]
     },
     include_package_data=True,
 )
