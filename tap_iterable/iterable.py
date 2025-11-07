@@ -56,6 +56,7 @@ class Iterable(object):
   @backoff.on_exception(backoff.expo,
                         requests.exceptions.HTTPError,
                         on_backoff=retry_handler,
+                        giveup=lambda e: e.response.status_code != 429,
                         max_tries=10)
   def _get(self, path, stream=True, **kwargs):
     conn_timeout = 30
