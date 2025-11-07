@@ -58,6 +58,9 @@ class Iterable(object):
                         on_backoff=retry_handler,
                         max_tries=10)
   def _get(self, path, stream=True, **kwargs):
+    conn_timeout = 30
+    read_timeout = 60 * 5
+    timeouts = (conn_timeout, read_timeout)
     uri = "{uri}{path}".format(uri=self.uri, path=path)
     
     # Add query params, including `api_key`.
@@ -67,7 +70,7 @@ class Iterable(object):
     uri += "?{params}".format(params=urlencode(params))
 
     logger.info("GET request to {uri}".format(uri=uri))
-    response = requests.get(uri, stream=stream, headers=self.headers)
+    response = requests.get(uri, stream=stream, headers=self.headers, timeout=timeouts)
     response.raise_for_status()
     return response
 
