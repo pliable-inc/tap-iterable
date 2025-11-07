@@ -133,6 +133,7 @@ class Stream():
                         item["transactionalData"] = json.loads(item["transactionalData"])
                     except KeyError:
                         pass
+                    logger.info(item)
                     self.update_session_bookmark(item[self.replication_key])
                     yield (self.stream, item)
             self.update_bookmark(state, self.session_bookmark)
