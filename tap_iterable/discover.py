@@ -9,7 +9,7 @@ import singer
 import sys
 from tap_iterable.streams import STREAMS
 
-# LOGGER = singer.get_logger()
+LOGGER = singer.get_logger()
 
 def discover_streams(client):
   streams = []
@@ -95,8 +95,8 @@ def translate_to_schema(fields):
       if k_name not in schema["properties"]:
         schema["properties"][k_name] = { "type": ["null", "object"], "properties": {} }
 
-      # LOGGER.info(k_name)
-      # LOGGER.info(json.dumps(schema, indent=2))
+      LOGGER.info(k_name)
+      LOGGER.info(json.dumps(schema, indent=2))
 
       schema["properties"][k_name]["properties"][k_value] = get_schema_datatype(v)
 
