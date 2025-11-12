@@ -110,7 +110,6 @@ class Stream():
         if self.replication_method == "INCREMENTAL":
             # These streams results are not ordered, so store highest value bookmark in session.
             for item in res:
-                logger.info(item)
                 self.update_session_bookmark(item[self.replication_key])
                 yield (self.stream, item)
             self.update_bookmark(state, self.session_bookmark)
