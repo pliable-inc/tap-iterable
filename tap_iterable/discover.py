@@ -84,7 +84,7 @@ def translate_to_schema(fields):
   schema = {
     "properties": {}
   }
-  LOGGER.info(json.dumps(fields, indent=2))
+
   for k, v in fields.items():
     # If k has a ".", k is an object.
     if "." in k:
@@ -96,7 +96,7 @@ def translate_to_schema(fields):
       if k_name not in schema["properties"]:
         schema["properties"][k_name] = { "type": ["null", "object"], "properties": {} }
 
-      LOGGER.info(k_name)
+      
       # LOGGER.info(json.dumps(schema, indent=2))
       if "properties" in schema["properties"][k_name]:
         schema["properties"][k_name]["properties"][k_value] = get_schema_datatype(v)
