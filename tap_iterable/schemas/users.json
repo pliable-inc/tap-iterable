@@ -8,6 +8,12 @@
     "userUuid": {
       "type": "string"
     },
+    "pets": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
     "country": {
       "type": [
         "null",
