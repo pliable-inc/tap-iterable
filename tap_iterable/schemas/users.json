@@ -5,6 +5,9 @@
   ],
   "additionalProperties": true,
   "properties": {
+    "userUuid": {
+      "type": "string"
+    },
     "country": {
       "type": [
         "null",
