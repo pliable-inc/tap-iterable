@@ -594,12 +594,6 @@
         "integer"
       ]
     },
-    "userId": {
-      "type": [
-        "null",
-        "string"
-      ]
-    },
     "shopify_created_at": {
       "type": [
         "null",
