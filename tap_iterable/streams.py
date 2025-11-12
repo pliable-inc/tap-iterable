@@ -137,6 +137,7 @@ class Stream():
                     for kp in self.key_properties:
                         if kp not in item or not item[kp]:
                             # skip
+                            skip_item = True
                             break
                     if skip_item:
                         continue
