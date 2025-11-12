@@ -270,8 +270,8 @@ class EmailUnsubscribe(Stream):
 class Users(Stream):
     name = "users"
     replication_method = "INCREMENTAL"
-    key_properties = [ "userId" ]
-    replication_key = "createdAt"
+    key_properties = [ "userUuid" ]
+    replication_key = "dateJoined"
     data_type_name = "user"
 
     def sync(self, state):
