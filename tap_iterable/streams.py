@@ -134,7 +134,7 @@ class Stream():
                     except KeyError:
                         pass
                     for kp in self.key_properties:
-                        if kp not in item:
+                        if kp not in item or not item[kp]:
                             # skip
                             continue
                     #logger.info(item)
