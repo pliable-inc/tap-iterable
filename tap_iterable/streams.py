@@ -133,10 +133,13 @@ class Stream():
                         item["transactionalData"] = json.loads(item["transactionalData"])
                     except KeyError:
                         pass
+                    skip_item = False
                     for kp in self.key_properties:
                         if kp not in item or not item[kp]:
                             # skip
-                            continue
+                            break
+                    if skip_item:
+                        continue
                     #logger.info(item)
                     self.update_session_bookmark(item[self.replication_key])
                     yield (self.stream, item)
