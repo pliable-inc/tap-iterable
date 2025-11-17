@@ -12,69 +12,141 @@ import requests
 import logging
 import time
 
+"""Simple wrapper for Iterable."""
+import time
+import socket
+from functools import wraps
+from requests.exceptions import ChunkedEncodingError, ConnectionError, Timeout
+from http.client import IncompleteRead
+from urllib3.exceptions import ProtocolError
 
 logger = logging.getLogger()
 
-
-""" Simple wrapper for Iterable. """
 class Iterable(object):
-
-  def __init__(self, api_key, start_date=None, api_window_in_days=30):
-    self.api_key = api_key
-    self.uri = "https://api.iterable.com/api/"
-    self.api_window_in_days = int(api_window_in_days)
-    self.MAX_BYTES = 10240
-    self.CHUNK_SIZE = 512
-    self.headers = {"Api-Key": self.api_key}
-
-
-  def _now(self):
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-  def _daterange(self, start_date, end_date):
-    total_days = (utils.strptime_with_tz(end_date) - utils.strptime_with_tz(start_date)).days
-    if total_days >= self.api_window_in_days:
-      for n in range(int(total_days / self.api_window_in_days)):
-        yield (utils.strptime_with_tz(start_date) + n * timedelta(int(self.api_window_in_days))).strftime("%Y-%m-%d %H:%M:%S")
-    else:
-      yield start_date
-
-
-  def _get_end_datetime(self, startDateTime):
-    endDateTime = utils.strptime_with_tz(startDateTime) + timedelta(self.api_window_in_days)
-    return endDateTime.strftime("%Y-%m-%d %H:%M:%S")
-
-
-  def retry_handler(details):
-    logger.info("Received 429 -- sleeping for %s seconds",
-                details['wait'])
-
-  # 
-  # The actual `get` request.
-  # 
-  
-  @backoff.on_exception(backoff.expo,
-                        requests.exceptions.HTTPError,
-                        on_backoff=retry_handler,
-                        giveup=lambda e: e.response.status_code != 429,
-                        max_tries=10)
-  def _get(self, path, stream=False, **kwargs):
-    conn_timeout = 30
-    read_timeout = 60 * 5
-    timeouts = (conn_timeout, read_timeout)
-    uri = "{uri}{path}".format(uri=self.uri, path=path)
+    def __init__(self, api_key, start_date=None, api_window_in_days=30):
+        self.api_key = api_key
+        self.uri = "https://api.iterable.com/api/"
+        self.api_window_in_days = int(api_window_in_days)
+        self.MAX_BYTES = 10240
+        self.CHUNK_SIZE = 512
+        self.headers = {"Api-Key": self.api_key}
+        
+    def _now(self):
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+    def _daterange(self, start_date, end_date):
+        total_days = (utils.strptime_with_tz(end_date) - utils.strptime_with_tz(start_date)).days
+        if total_days >= self.api_window_in_days:
+            for n in range(int(total_days / self.api_window_in_days)):
+                yield (utils.strptime_with_tz(start_date) + n * timedelta(int(self.api_window_in_days))).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            yield start_date
+            
+    def _get_end_datetime(self, startDateTime):
+        endDateTime = utils.strptime_with_tz(startDateTime) + timedelta(self.api_window_in_days)
+        return endDateTime.strftime("%Y-%m-%d %H:%M:%S")
+        
+    def retry_handler(details):
+        logger.info("Received 429 -- sleeping for %s seconds", details['wait'])
     
-    # Add query params, including `api_key`.
-    params = { }
-    for key, value in kwargs.items():
-      params[key] = value
-    uri += "?{params}".format(params=urlencode(params))
-
-    logger.info("GET request to {uri}".format(uri=uri))
-    response = requests.get(uri, stream=stream, headers=self.headers, timeout=timeouts)
-    response.raise_for_status()
-    return response
+    @staticmethod
+    def connection_retry_handler(func):
+        """Decorator to retry on connection failures with exponential backoff."""
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            max_retries = 5
+            retry_count = 0
+            
+            # Exceptions that indicate connection was dropped
+            connection_exceptions = (
+                ChunkedEncodingError,
+                ConnectionError,
+                IncompleteRead,
+                ProtocolError,
+                Timeout,
+                socket.timeout,
+            )
+            
+            while retry_count < max_retries:
+                try:
+                    return func(self, *args, **kwargs)
+                    
+                except connection_exceptions as e:
+                    retry_count += 1
+                    
+                    if retry_count >= max_retries:
+                        logger.error(
+                            f"Connection failed after {max_retries} retries: {e}"
+                        )
+                        raise
+                    
+                    # Exponential backoff: 2, 4, 8, 16, 32 seconds
+                    wait_time = 2 ** retry_count
+                    logger.warning(
+                        f"Connection error ({type(e).__name__}: {e}). "
+                        f"Retrying in {wait_time}s... (attempt {retry_count}/{max_retries})"
+                    )
+                    time.sleep(wait_time)
+                    
+            return func(self, *args, **kwargs)
+        return wrapper
+    
+    # The actual `get` request with both rate limit and connection retry handling
+    @backoff.on_exception(
+        backoff.expo,
+        requests.exceptions.HTTPError,
+        on_backoff=retry_handler,
+        giveup=lambda e: e.response.status_code != 429,
+        max_tries=10
+    )
+    @connection_retry_handler
+    def _get(self, path, stream=True, **kwargs):
+        conn_timeout = 30
+        read_timeout = 60 * 5
+        timeouts = (conn_timeout, read_timeout)
+        uri = "{uri}{path}".format(uri=self.uri, path=path)
+        
+        # Add query params
+        params = {}
+        for key, value in kwargs.items():
+            params[key] = value
+        uri += "?{params}".format(params=urlencode(params))
+        
+        logger.info("GET request to {uri}".format(uri=uri))
+        
+        # Create session with TCP keep-alive
+        session = self._get_session_with_keepalive()
+        response = session.get(uri, stream=stream, headers=self.headers, timeout=timeouts)
+        response.raise_for_status()
+        
+        return response
+    
+    def _get_session_with_keepalive(self):
+        """Create a requests session with TCP keep-alive enabled."""
+        import requests
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.connection import create_connection
+        
+        # Custom connection with keep-alive
+        class KeepAliveHTTPAdapter(HTTPAdapter):
+            def init_poolmanager(self, *args, **kwargs):
+                if 'socket_options' not in kwargs:
+                    kwargs['socket_options'] = []
+                
+                # Enable TCP keep-alive
+                kwargs['socket_options'] += [
+                    (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
+                    (socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 120),   # Start after 2min idle
+                    (socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 30),   # Probe every 30s
+                    (socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3),      # 3 failed probes
+                ]
+                return super().init_poolmanager(*args, **kwargs)
+        
+        session = requests.Session()
+        session.mount('http://', KeepAliveHTTPAdapter())
+        session.mount('https://', KeepAliveHTTPAdapter())
+        
+        return session
     
   #
   # The common `get` request.
