@@ -44,6 +44,12 @@ class Iterable(object):
         
     def _get_end_datetime(self, startDateTime):
         endDateTime = utils.strptime_with_tz(startDateTime) + timedelta(self.api_window_in_days)
+        now = utils.strptime_with_tz(self._now())
+        
+        # Never return a date in the future
+        if endDateTime > now:
+            endDateTime = now
+        
         return endDateTime.strftime("%Y-%m-%d %H:%M:%S")
     
     def retry_handler(details):
