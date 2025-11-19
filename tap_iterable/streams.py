@@ -9,6 +9,7 @@ import datetime
 import pytz
 import singer
 import time
+import backoff
 from singer import metadata
 from singer import utils
 from singer.metrics import Point
@@ -123,28 +124,52 @@ class Stream():
         get_generator = getattr(self.client, "get_data_export_generator")
         bookmark = self.get_bookmark(state)
         fns = get_generator(self.data_type_name, bookmark)
+        
         for fn in fns:
-            res = fn()
-            for item in res.iter_lines():
-                if item:
-                    item = json.loads(item.decode('utf-8'))
-                    try:
-                        item["transactionalData"] = json.loads(item["transactionalData"])
-                    except KeyError:
-                        pass
-                    skip_item = False
-                    for kp in self.key_properties:
-                        if kp not in item or not item[kp]:
-                            # skip
-                            skip_item = True
-                            break
-                    if skip_item:
-                        continue
-                    #logger.info(item)
-                    self.update_session_bookmark(item[self.replication_key])
-                    yield (self.stream, item)
+            # Process all items from this export with retry logic
+            for item in self._fetch_and_process_export(fn):
+                skip_item = False
+                for kp in self.key_properties:
+                    if kp not in item or not item[kp]:
+                        skip_item = True
+                        break
+                
+                if skip_item:
+                    continue
+                
+                self.update_session_bookmark(item[self.replication_key])
+                yield (self.stream, item)
+            
             self.update_bookmark(state, self.session_bookmark)
             singer.write_state(state)
+
+    def retry_handler(details):
+        logger.warning(
+            f"Error reading response, retrying... (attempt {details['tries']}): {details['exception']}"
+        )
+    
+    @backoff.on_exception(
+        backoff.expo,
+        (requests.exceptions.RequestException, requests.exceptions.ChunkedEncodingError),
+        max_tries=5,
+        on_backoff=retry_handler
+    )
+    def _fetch_and_process_export(self, fn):
+        """Fetch export data and yield processed items with retry on connection errors."""
+        res = fn()
+        
+        for line in res.iter_lines():
+            if not line:
+                continue
+                
+            item = json.loads(line.decode('utf-8'))
+            
+            try:
+                item["transactionalData"] = json.loads(item["transactionalData"])
+            except KeyError:
+                pass
+            
+            yield item
 
 
 class Lists(Stream):
