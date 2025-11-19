@@ -160,7 +160,7 @@ class Stream():
             self.update_bookmark(state, self.session_bookmark)
             singer.write_state(state)
 
-    def _fetch_and_process_export(self, fn):
+    def _process_export_stream(self, fn):
         """Fetch export data and yield processed items with retry on connection errors."""
         res = fn()
         
