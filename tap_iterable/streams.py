@@ -16,6 +16,8 @@ from singer import utils
 from singer.metrics import Point
 from dateutil.parser import parse
 from tap_iterable.context import Context
+from urllib3.exceptions import ProtocolError
+from http.client import IncompleteRead
 
 
 logger = singer.get_logger()
@@ -151,7 +153,7 @@ class Stream():
     
     @backoff.on_exception(
         backoff.expo,
-        (requests.exceptions.RequestException, requests.exceptions.ChunkedEncodingError),
+        (requests.exceptions.RequestException, requests.exceptions.ChunkedEncodingError, ProtocolError, IncompleteRead),
         max_tries=5,
         on_backoff=retry_handler
     )
