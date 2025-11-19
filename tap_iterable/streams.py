@@ -10,6 +10,7 @@ import pytz
 import singer
 import time
 import backoff
+import requests
 from singer import metadata
 from singer import utils
 from singer.metrics import Point
