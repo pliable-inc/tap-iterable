@@ -26,7 +26,8 @@ class Iterable(object):
     def __init__(self, api_key, start_date=None, api_window_in_days=30):
         self.api_key = api_key
         self.uri = "https://api.iterable.com/api/"
-        self.api_window_in_days = int(api_window_in_days)
+        # Convert days to hours for internal calculations
+        self.api_window_in_hours = float(api_window_in_days) * 24
         self.MAX_BYTES = 10240
         self.CHUNK_SIZE = 512
         self.headers = {"Api-Key": self.api_key}
@@ -35,22 +36,31 @@ class Iterable(object):
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     def _daterange(self, start_date, end_date):
-        total_days = (utils.strptime_with_tz(end_date) - utils.strptime_with_tz(start_date)).days
-        if total_days >= self.api_window_in_days:
-            for n in range(int(total_days / self.api_window_in_days)):
-                yield (utils.strptime_with_tz(start_date) + n * timedelta(int(self.api_window_in_days))).strftime("%Y-%m-%d %H:%M:%S")
+        """Generate date ranges based on the configured window size in hours."""
+        start_dt = utils.strptime_with_tz(start_date)
+        end_dt = utils.strptime_with_tz(end_date)
+        
+        total_hours = (end_dt - start_dt).total_seconds() / 3600
+        
+        if total_hours >= self.api_window_in_hours:
+            num_windows = int(total_hours / self.api_window_in_hours)
+            for n in range(num_windows):
+                window_start = start_dt + timedelta(hours=n * self.api_window_in_hours)
+                yield window_start.strftime("%Y-%m-%d %H:%M:%S")
         else:
             yield start_date
         
     def _get_end_datetime(self, startDateTime):
-        endDateTime = utils.strptime_with_tz(startDateTime) + timedelta(self.api_window_in_days)
+        """Calculate end datetime based on start datetime and window size in hours."""
+        start_dt = utils.strptime_with_tz(startDateTime)
+        end_dt = start_dt + timedelta(hours=self.api_window_in_hours)
         now = utils.strptime_with_tz(self._now())
         
         # Never return a date in the future
-        if endDateTime > now:
-            endDateTime = now
+        if end_dt > now:
+            end_dt = now
         
-        return endDateTime.strftime("%Y-%m-%d %H:%M:%S")
+        return end_dt.strftime("%Y-%m-%d %H:%M:%S")
     
     def retry_handler(details):
         logger.info("Received 429 -- sleeping for %s seconds", details['wait'])
