@@ -148,7 +148,7 @@ class Stream():
                     # Success - break out of retry loop
                     break
                     
-                except (ProtocolError, IncompleteRead, ConnectionError) as e:
+                except (requests.exceptions.ChunkedEncodingError, ProtocolError, IncompleteRead, ConnectionError) as e:
                     if attempt < max_retries - 1:
                         wait_time = 2 ** attempt  # exponential backoff
                         logger.warning(f"Connection error, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries}): {e}")
