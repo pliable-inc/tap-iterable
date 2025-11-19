@@ -129,34 +129,37 @@ class Stream():
         fns = get_generator(self.data_type_name, bookmark)
         
         for fn in fns:
-            # Process all items from this export with retry logic
-            for item in self._fetch_and_process_export(fn):
-                skip_item = False
-                for kp in self.key_properties:
-                    if kp not in item or not item[kp]:
-                        skip_item = True
-                        break
-                
-                if skip_item:
-                    continue
-                
-                self.update_session_bookmark(item[self.replication_key])
-                yield (self.stream, item)
+            max_retries = 10
+            for attempt in range(max_retries):
+                try:
+                    for item in self._process_export_stream(fn):
+                        skip_item = False
+                        for kp in self.key_properties:
+                            if kp not in item or not item[kp]:
+                                skip_item = True
+                                break
+                        
+                        if skip_item:
+                            continue
+                        
+                        self.update_session_bookmark(item[self.replication_key])
+                        yield (self.stream, item)
+                    
+                    # Success - break out of retry loop
+                    break
+                    
+                except (ProtocolError, IncompleteRead, ConnectionError) as e:
+                    if attempt < max_retries - 1:
+                        wait_time = 2 ** attempt  # exponential backoff
+                        logger.warning(f"Connection error, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries}): {e}")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"Failed after {max_retries} attempts")
+                        raise
             
             self.update_bookmark(state, self.session_bookmark)
             singer.write_state(state)
 
-    def retry_handler(details):
-        logger.warning(
-            f"Error reading response, retrying... (attempt {details['tries']}): {details['exception']}"
-        )
-    
-    @backoff.on_exception(
-        backoff.expo,
-        (requests.exceptions.RequestException, requests.exceptions.ChunkedEncodingError, ProtocolError, IncompleteRead),
-        max_tries=5,
-        on_backoff=retry_handler
-    )
     def _fetch_and_process_export(self, fn):
         """Fetch export data and yield processed items with retry on connection errors."""
         res = fn()
