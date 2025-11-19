@@ -54,48 +54,6 @@ class Iterable(object):
     
     def retry_handler(details):
         logger.info("Received 429 -- sleeping for %s seconds", details['wait'])
-
-    @staticmethod
-    def connection_retry_handler(func):
-        """Decorator to retry on connection failures with exponential backoff."""
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            max_retries = 5
-            retry_count = 0
-            
-            # Exceptions that indicate connection was dropped
-            connection_exceptions = (
-                ChunkedEncodingError,
-                ConnectionError,
-                IncompleteRead,
-                ProtocolError,
-                Timeout,
-                socket.timeout,
-            )
-            
-            while retry_count < max_retries:
-                try:
-                    return func(self, *args, **kwargs)
-                    
-                except connection_exceptions as e:
-                    retry_count += 1
-                    
-                    if retry_count >= max_retries:
-                        logger.error(
-                            f"Connection failed after {max_retries} retries: {e}"
-                        )
-                        raise
-                    
-                    # Exponential backoff: 2, 4, 8, 16, 32 seconds
-                    wait_time = 2 ** retry_count
-                    logger.warning(
-                        f"Connection error ({type(e).__name__}: {e}). "
-                        f"Retrying in {wait_time}s... (attempt {retry_count}/{max_retries})"
-                    )
-                    time.sleep(wait_time)
-                    
-            return func(self, *args, **kwargs)
-        return wrapper
     
     # The actual `get` request with both rate limit and connection retry handling
     @backoff.on_exception(
@@ -105,7 +63,6 @@ class Iterable(object):
         giveup=lambda e: e.response.status_code != 429,
         max_tries=10
     )
-    @connection_retry_handler
     def _get(self, path, stream=True, **kwargs):
         conn_timeout = 30
         read_timeout = 60 * 5
